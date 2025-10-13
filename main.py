@@ -30,7 +30,7 @@ def get_snapshots(cfg: Config):
             print(f'Snapshot: {snapshot_url}')
 
             response = requests.get(snapshot_url)
-            snapshot_id = snapshot_url.split("/web/")[1].split("/")[0]
+            snapshot_id = snapshot.timestamp
             
             # Insert base tag to make the browser load images from Wayback Machine
             html_content = response.text.replace(
