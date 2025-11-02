@@ -8,6 +8,7 @@ import os
 @dataclass
 class Config:
     url: str
+    filename: str
     start_year: int
     end_year: int
     user_agent: str = "Mozilla/5.0 (compatible; WaybackScraper/1.0; +https://example.com)"
@@ -16,6 +17,7 @@ class Config:
 def setup() -> Config:
     return Config(
         url = str(input('URL: ')),
+        filename = str(input('Filename: ')),
         start_year = int(input('Start year: ')),
         end_year = int(input('End year: '))
     )
@@ -42,10 +44,9 @@ async def get_snapshots(cfg: Config):
         cdx = WaybackMachineCDXServerAPI(url=cfg.url, user_agent=cfg.user_agent)
         
         try:
-            snapshot = cdx.near(year=int(f'{year}0201'))
+            snapshot = cdx.near(year=int(f'{year}0205'))
             snapshot_url = snapshot.archive_url[:-3] if snapshot.archive_url.endswith("id_") else snapshot.archive_url
-            snapshot_id = snapshot.timestamp
-            filename = f'{year}_{snapshot_id}.png'
+            filename = f'{cfg.filename}_{year}.png'
             print(f'Snapshot: {snapshot_url}')
 
             task = make_screenshot_playwright(url=snapshot_url, filename=filename)
