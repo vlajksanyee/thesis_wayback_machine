@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from moviepy import ImageClip, concatenate_videoclips
+from moviepy import ImageClip, TextClip, CompositeVideoClip, concatenate_videoclips
 from playwright.async_api import async_playwright
 from waybackpy import WaybackMachineCDXServerAPI
 import asyncio
@@ -53,7 +53,7 @@ async def get_snapshots(cfg: Config):
         cdx = WaybackMachineCDXServerAPI(url=cfg.url, user_agent=cfg.user_agent)
 
         try:
-            snapshot = cdx.near(year=int(f"{year}0208"))
+            snapshot = cdx.near(year=int(f"{year}0203"))
             snapshot_url = (
                 snapshot.archive_url[:-3]
                 if snapshot.archive_url.endswith("id_")
@@ -90,8 +90,23 @@ def create_video_from_snapshots(
 
     clips = []
     for filename in image_files:
-        clip = ImageClip(filename, duration=3)
-        clips.append(clip)
+        year = os.path.basename(filename).split("_")[0]
+
+        base_clip = ImageClip(filename, duration=3)
+
+        text = TextClip(
+            text=year,
+            font_size=40,
+            color="white",
+            stroke_color="black",
+            stroke_width=2,
+        )
+
+        text = text.with_duration(3)
+        text = text.with_position(("center", "bottom"))
+
+        final = CompositeVideoClip([base_clip, text])
+        clips.append(final)
 
     final_clip = concatenate_videoclips(clips, method="compose")
 
