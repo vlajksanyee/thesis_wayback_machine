@@ -31,12 +31,12 @@ def setup() -> Config:
 async def make_screenshot_playwright(url: str, filename: str):
     async with async_playwright() as p:
         browser = await p.chromium.launch()
-        page = await browser.new_page()
+        page = await browser.new_page(viewport={"width": 1920, "height": 1080})
         try:
             await page.goto(url, timeout=120000)
             await page.wait_for_selector("body", state="visible", timeout=30000)
             await page.screenshot(
-                path=os.path.join("snapshots", filename), full_page=True
+                path=os.path.join("snapshots", filename)
             )
             print(f"Screenshot saved: {filename}")
         except Exception as e:
@@ -95,7 +95,7 @@ def create_video_from_snapshots(
         base_clip = ImageClip(filename, duration=3)
 
         text = TextClip(
-            text=year,
+            text=f"{year}\n",
             font_size=40,
             color="white",
             stroke_color="black",
@@ -103,7 +103,7 @@ def create_video_from_snapshots(
         )
 
         text = text.with_duration(3)
-        text = text.with_position(("center", "bottom"))
+        text = text.with_position(("center", 980))
 
         final = CompositeVideoClip([base_clip, text])
         clips.append(final)
