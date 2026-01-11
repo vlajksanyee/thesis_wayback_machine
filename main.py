@@ -1,11 +1,13 @@
 from dataclasses import dataclass
+from fastapi import BackgroundTasks, FastAPI
 from moviepy import ImageClip, TextClip, CompositeVideoClip, concatenate_videoclips
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
+from pydantic import BaseModel
 from waybackpy import WaybackMachineCDXServerAPI
-import asyncio
 import glob
 import os
 
+app = FastAPI()
 
 @dataclass
 class Config:
@@ -14,40 +16,36 @@ class Config:
     start_year: int
     end_year: int
     user_agent: str = (
-        "Mozilla/5.0 (compatible; WaybackScraper/1.0; +https://example.com)"
+        "Mozilla/5.0 (compatible; MyThesisProject/1.0; +mailto:student@example.com)"
     )
     save_folder: str = "snapshots"
 
-
-def setup() -> Config:
-    return Config(
-        url=str(input("URL: ")),
-        filename=str(input("Filename: ")),
-        start_year=int(input("Start year: ")),
-        end_year=int(input("End year: ")),
-    )
+class VideoRequest(BaseModel):
+    url: str
+    filename: str
+    start_year: int
+    end_year: int
 
 
-async def make_screenshot_playwright(url: str, filename: str):
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page(viewport={"width": 1920, "height": 1080})
+def make_screenshot_playwright(url: str, filename: str):
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1920, "height": 1080})
         try:
-            await page.goto(url, timeout=120000)
-            await page.wait_for_selector("body", state="visible", timeout=30000)
-            await page.screenshot(
+            page.goto(url, timeout=120000)
+            page.wait_for_selector("body", state="visible", timeout=30000)
+            page.screenshot(
                 path=os.path.join("snapshots", filename)
             )
             print(f"Screenshot saved: {filename}")
         except Exception as e:
             print(f"Error saving screenshot: {filename}: {e}")
         finally:
-            await browser.close()
+            browser.close()
 
 
-async def get_snapshots(cfg: Config):
+def get_snapshots(cfg: Config):
     os.makedirs(cfg.save_folder, exist_ok=True)
-    screenshot_tasks = []
     for year in range(cfg.start_year, cfg.end_year + 1):
         print(f"=== {year} ===")
         cdx = WaybackMachineCDXServerAPI(url=cfg.url, user_agent=cfg.user_agent)
@@ -62,17 +60,10 @@ async def get_snapshots(cfg: Config):
             filename = f"{year}_{cfg.filename}.png"
             print(f"Snapshot: {snapshot_url}")
 
-            task = make_screenshot_playwright(url=snapshot_url, filename=filename)
-            screenshot_tasks.append(task)
+            make_screenshot_playwright(url=snapshot_url, filename=filename)
 
         except Exception as e:
             print(f"Error at year {year}: {e}\n")
-
-    if screenshot_tasks:
-        print("\nCreating screenshots")
-        await asyncio.gather(*screenshot_tasks)
-    else:
-        print("ERROR: No screenshots to create")
 
 
 def create_video_from_snapshots(
@@ -121,12 +112,38 @@ def create_video_from_snapshots(
     print(f"Created video: {output_filename}")
 
 
-if __name__ == "__main__":
-    config = setup()
+def make_video(config: Config):
+    print("--- Video creation started ---")
 
-    asyncio.run(get_snapshots(cfg=config))
+    get_snapshots(cfg=config)
+
+    output_name = f"video_{config.start_year}_{config.end_year}.mp4"
 
     create_video_from_snapshots(
         input_folder=config.save_folder,
-        output_filename=f"history_{config.start_year}_to_{config.end_year}.mp4",
+        output_filename=os.path.join("snapshots", output_name)
     )
+
+    print(f"--- Video created: {output_name} ---")
+
+
+@app.post("/create-video")
+async def create_video_endpoint(request: VideoRequest, background_tasks: BackgroundTasks):
+    config = Config(
+        url=request.url,
+        filename=request.filename,
+        start_year=request.start_year,
+        end_year=request.end_year
+    )
+
+    background_tasks.add_task(make_video, config)
+
+    return {
+        "status": "Video creation started in background",
+        "details": f"URL: {request.url} - Start year: {request.start_year} - End year: {request.end_year}"
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8001)
