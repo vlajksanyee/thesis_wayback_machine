@@ -17,7 +17,7 @@ class Config:
     start_year: int
     end_year: int
     user_agent: str = (
-        "Mozilla/5.0 (compatible; MyThesisProject/1.0; +mailto:student@example.com)"
+        "Mozilla/5.0 (compatible; SandorVlajkThesisProject/1.0; +mailto:vlajksanyi@gmail.com)"
     )
     save_folder: str = "snapshots"
 
@@ -57,8 +57,14 @@ def get_snapshots(cfg: Config):
                     time.sleep(2)
                     page.screenshot(path=full_path)
                     print(f"Screenshot saved: {filename}")
-                except Exception as page_error:
-                    print(f"Error saving screenshot: {filename}: {page_error}")
+                except Exception as page_err:
+                    print(f"  Error: Timeout - ({page_err})")
+                    
+                    try:
+                        page.screenshot(path=full_path)
+                        print(f"  Saving partial screenshot...")
+                    except Exception as e:
+                        print(f"  Error saving partial screenshot: {e}")
 
             except Exception as e:
                 print(f"Error at year {year}: {e}\n")
