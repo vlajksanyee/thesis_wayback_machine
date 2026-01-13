@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from waybackpy import WaybackMachineCDXServerAPI
 import glob
 import os
+import time
 
 app = FastAPI()
 
@@ -27,43 +28,42 @@ class VideoRequest(BaseModel):
     end_year: int
 
 
-def make_screenshot_playwright(url: str, filename: str):
+def get_snapshots(cfg: Config):
+    os.makedirs(cfg.save_folder, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1920, "height": 1080})
-        try:
-            page.goto(url, timeout=120000)
-            page.wait_for_selector("body", state="visible", timeout=30000)
-            page.screenshot(
-                path=os.path.join("snapshots", filename)
-            )
-            print(f"Screenshot saved: {filename}")
-        except Exception as e:
-            print(f"Error saving screenshot: {filename}: {e}")
-        finally:
-            browser.close()
 
+        for year in range(cfg.start_year, cfg.end_year + 1):
+            print(f"=== {year} ===")
 
-def get_snapshots(cfg: Config):
-    os.makedirs(cfg.save_folder, exist_ok=True)
-    for year in range(cfg.start_year, cfg.end_year + 1):
-        print(f"=== {year} ===")
-        cdx = WaybackMachineCDXServerAPI(url=cfg.url, user_agent=cfg.user_agent)
+            if year > cfg.start_year:
+                time.sleep(2)
 
-        try:
-            snapshot = cdx.near(year=int(f"{year}0203"))
-            snapshot_url = (
-                snapshot.archive_url[:-3]
-                if snapshot.archive_url.endswith("id_")
-                else snapshot.archive_url
-            )
-            filename = f"{year}_{cfg.filename}.png"
-            print(f"Snapshot: {snapshot_url}")
+            try:
+                cdx = WaybackMachineCDXServerAPI(url=cfg.url, user_agent=cfg.user_agent)
+                snapshot = cdx.near(year=int(f"{year}0203"))
+                snapshot_url = (
+                    snapshot.archive_url[:-3]
+                    if snapshot.archive_url.endswith("id_")
+                    else snapshot.archive_url
+                )
+                filename = f"{year}_{cfg.filename}.png"
+                full_path = os.path.join(cfg.save_folder, filename)
+                print(f"Snapshot: {snapshot_url}")
 
-            make_screenshot_playwright(url=snapshot_url, filename=filename)
+                try:
+                    page.goto(snapshot_url, timeout=30000, wait_until="domcontentloaded")
+                    time.sleep(2)
+                    page.screenshot(path=full_path)
+                    print(f"Screenshot saved: {filename}")
+                except Exception as page_error:
+                    print(f"Error saving screenshot: {filename}: {page_error}")
 
-        except Exception as e:
-            print(f"Error at year {year}: {e}\n")
+            except Exception as e:
+                print(f"Error at year {year}: {e}\n")
+
+        browser.close()
 
 
 def create_video_from_snapshots(
