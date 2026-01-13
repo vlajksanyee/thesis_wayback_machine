@@ -1,14 +1,19 @@
 from dataclasses import dataclass
 from fastapi import BackgroundTasks, FastAPI
+from fastapi.staticfiles import StaticFiles
 from moviepy import ImageClip, TextClip, CompositeVideoClip, concatenate_videoclips
 from playwright.sync_api import sync_playwright
 from pydantic import BaseModel
 from waybackpy import WaybackMachineCDXServerAPI
 import glob
 import os
+import re
 import time
 
 app = FastAPI()
+
+os.makedirs("snapshots", exist_ok=True)
+app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
 
 @dataclass
 class Config:
@@ -23,9 +28,14 @@ class Config:
 
 class VideoRequest(BaseModel):
     url: str
-    filename: str
     start_year: int
     end_year: int
+
+
+def get_filename_from_url(url: str):
+    name = url.replace("https://", "").replace("http://", "").replace("www.", "")
+    clean_name = re.sub(r'[^a-zA-Z0-9]', '_', name)
+    return clean_name[:50]
 
 
 def get_snapshots(cfg: Config):
@@ -35,7 +45,7 @@ def get_snapshots(cfg: Config):
         page = browser.new_page(viewport={"width": 1920, "height": 1080})
 
         for year in range(cfg.start_year, cfg.end_year + 1):
-            print(f"=== {year} ===")
+            print(f"= {year} =")
 
             if year > cfg.start_year:
                 time.sleep(2)
@@ -73,10 +83,10 @@ def get_snapshots(cfg: Config):
 
 
 def create_video_from_snapshots(
-    input_folder: str, output_filename: str = "web_history.mp4"
+    input_folder: str, output_filename: str, project_name: str
 ):
-
-    search_path = os.path.join(input_folder, "*.png")
+    search_pattern = f"*_{project_name}.png"
+    search_path = os.path.join(input_folder, search_pattern)
     image_files = sorted(glob.glob(search_path))
 
     if not image_files:
@@ -117,6 +127,14 @@ def create_video_from_snapshots(
 
     print(f"Created video: {output_filename}")
 
+    print("--- Deleting saved screenshots... ---")
+    for img_path in image_files:
+        try:
+            os.remove(img_path)
+        except Exception as e:
+            print(f"Failed to delete: {img_path}")
+    print("--- Saved screenshots deleted ---")
+
 
 def make_video(config: Config):
     print("--- Video creation started ---")
@@ -127,7 +145,8 @@ def make_video(config: Config):
 
     create_video_from_snapshots(
         input_folder=config.save_folder,
-        output_filename=os.path.join("snapshots", output_name)
+        output_filename=os.path.join("snapshots", output_name),
+        project_name=config.filename
     )
 
     print(f"--- Video created: {output_name} ---")
@@ -137,7 +156,7 @@ def make_video(config: Config):
 async def create_video_endpoint(request: VideoRequest, background_tasks: BackgroundTasks):
     config = Config(
         url=request.url,
-        filename=request.filename,
+        filename=get_filename_from_url(request.url),
         start_year=request.start_year,
         end_year=request.end_year
     )
