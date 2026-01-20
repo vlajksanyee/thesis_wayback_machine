@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from fastapi import BackgroundTasks, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from moviepy import ImageClip, TextClip, CompositeVideoClip, concatenate_videoclips
 from playwright.sync_api import sync_playwright
@@ -11,6 +12,14 @@ import re
 import time
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 os.makedirs("snapshots", exist_ok=True)
 app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
