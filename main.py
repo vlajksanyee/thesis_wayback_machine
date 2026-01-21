@@ -129,8 +129,9 @@ def create_video_from_snapshots(
     final_clip.write_videofile(
         output_filename,
         fps=24,
-        codec="mpeg4",
-        temp_audiofile="temp-audio.m4a",
+        codec="libx264",
+        audio=False,
+        ffmpeg_params=["-pix_fmt", "yuv420p"],
         remove_temp=True,
     )
 
@@ -150,7 +151,7 @@ def make_video(config: Config):
 
     get_snapshots(cfg=config)
 
-    output_name = f"video_{config.start_year}_{config.end_year}.mp4"
+    output_name = f"video_{config.filename}_{config.start_year}_{config.end_year}.mp4"
 
     create_video_from_snapshots(
         input_folder=config.save_folder,
@@ -163,19 +164,39 @@ def make_video(config: Config):
 
 @app.post("/create-video")
 async def create_video_endpoint(request: VideoRequest, background_tasks: BackgroundTasks):
+    timestamp = int(time.time())
+    auto_filename = get_filename_from_url(request.url)
+    timestamp_filename = f"{auto_filename}_{timestamp}"
+
     config = Config(
         url=request.url,
-        filename=get_filename_from_url(request.url),
+        filename=timestamp_filename,
         start_year=request.start_year,
         end_year=request.end_year
     )
 
     background_tasks.add_task(make_video, config)
 
+    final_video_filename = f"video_{timestamp_filename}_{request.start_year}_{request.end_year}.mp4"
+    full_video_url = f"http://localhost:8001/snapshots/{final_video_filename}"
+
     return {
         "status": "Video creation started in background",
-        "details": f"URL: {request.url} - Start year: {request.start_year} - End year: {request.end_year}"
+        "video_url": full_video_url,
+        "video_filename": final_video_filename
     }
+
+
+@app.get("/check-video/{filename}")
+async def check_video_status(filename: str):
+    full_path = os.path.join("snapshots", filename)
+    
+    if os.path.exists(full_path):
+        if os.path.getsize(full_path) > 0:
+            return {"ready": True}
+    
+    return {"ready": False}
+
 
 if __name__ == "__main__":
     import uvicorn
