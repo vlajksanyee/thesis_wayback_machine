@@ -30,6 +30,7 @@ class Config:
     filename: str
     start_year: int
     end_year: int
+    text_position: str
     user_agent: str = (
         "Mozilla/5.0 (compatible; SandorVlajkThesisProject/1.0; +mailto:vlajksanyi@gmail.com)"
     )
@@ -39,6 +40,7 @@ class VideoRequest(BaseModel):
     url: str
     start_year: int
     end_year: int
+    text_position: str = "bottom-center"
 
 
 def get_filename_from_url(url: str):
@@ -74,6 +76,10 @@ def get_snapshots(cfg: Config):
                 try:
                     page.goto(snapshot_url, timeout=30000, wait_until="domcontentloaded")
                     time.sleep(2)
+                    page.add_style_tag(content="""
+                        #wm-ipp-base { display: none !important; }
+                        html, body { margin-top: 0 !important; }
+                    """)
                     page.screenshot(path=full_path)
                     print(f"Screenshot saved: {filename}")
                 except Exception as page_err:
@@ -92,7 +98,7 @@ def get_snapshots(cfg: Config):
 
 
 def create_video_from_snapshots(
-    input_folder: str, output_filename: str, project_name: str
+    input_folder: str, output_filename: str, project_name: str, text_position: str
 ):
     search_pattern = f"*_{project_name}.png"
     search_path = os.path.join(input_folder, search_pattern)
@@ -104,6 +110,17 @@ def create_video_from_snapshots(
 
     print(f"\nCreating video")
 
+    pos_mapping = {
+        "top-left": (50, 50),
+        "top-right": (1700, 50),
+        "top-center": ("center", 50),
+        "bottom-left": (50, 950),
+        "bottom-right": (1700, 950),
+        "bottom-center": ("center", 950),
+    }
+
+    text_pos = pos_mapping.get(text_position, ("center", 950))
+
     clips = []
     for filename in image_files:
         year = os.path.basename(filename).split("_")[0]
@@ -112,22 +129,29 @@ def create_video_from_snapshots(
 
         text = TextClip(
             text=f"{year}\n",
-            font_size=40,
+            font_size=60,
             color="white",
             stroke_color="black",
             stroke_width=2,
         )
 
         text = text.with_duration(3)
-        text = text.with_position(("center", 980))
+        text = text.with_position(text_pos)
 
         final = CompositeVideoClip([base_clip, text])
         clips.append(final)
 
     final_clip = concatenate_videoclips(clips, method="compose")
 
+    folder = os.path.dirname(output_filename)
+    original_name = os.path.basename(output_filename)
+    temp_filename = os.path.join(folder, f"TEMP_{original_name}")
+
+    if os.path.exists(temp_filename):
+        os.remove(temp_filename)
+
     final_clip.write_videofile(
-        output_filename,
+        temp_filename,
         fps=24,
         codec="libx264",
         audio=False,
@@ -135,15 +159,25 @@ def create_video_from_snapshots(
         remove_temp=True,
     )
 
+    final_clip.close()
+    for clip in clips:
+        clip.close()
+    
+    time.sleep(1)
+
+    if os.path.exists(output_filename):
+        os.remove(output_filename)
+
+    os.rename(temp_filename, output_filename)
+
     print(f"Created video: {output_filename}")
 
-    print("--- Deleting saved screenshots... ---")
+    # Delete saved screenshots
     for img_path in image_files:
         try:
             os.remove(img_path)
         except Exception as e:
             print(f"Failed to delete: {img_path}")
-    print("--- Saved screenshots deleted ---")
 
 
 def make_video(config: Config):
@@ -156,7 +190,8 @@ def make_video(config: Config):
     create_video_from_snapshots(
         input_folder=config.save_folder,
         output_filename=os.path.join("snapshots", output_name),
-        project_name=config.filename
+        project_name=config.filename,
+        text_position=config.text_position
     )
 
     print(f"--- Video created: {output_name} ---")
@@ -172,7 +207,8 @@ async def create_video_endpoint(request: VideoRequest, background_tasks: Backgro
         url=request.url,
         filename=timestamp_filename,
         start_year=request.start_year,
-        end_year=request.end_year
+        end_year=request.end_year,
+        text_position=request.text_position
     )
 
     background_tasks.add_task(make_video, config)

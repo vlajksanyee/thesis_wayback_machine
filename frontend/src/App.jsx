@@ -5,6 +5,7 @@ function App() {
   const [url, setUrl] = useState('')
   const [startYear, setStartYear] = useState(2015)
   const [endYear, setEndYear] = useState(2018)
+  const [textPosition, setTextPosition] = useState('bottom-center')
   const [status, setStatus] = useState('idle')
   const [videoUrl, setVideoUrl] = useState(null)
   const [message, setMessage] = useState('')
@@ -41,7 +42,8 @@ function App() {
         body: JSON.stringify({
           url: url,
           start_year: parseInt(startYear),
-          end_year: parseInt(endYear)
+          end_year: parseInt(endYear),
+          text_position: textPosition
         }),
       })
 
@@ -98,9 +100,21 @@ function App() {
                 type="number"
                 value={endYear}
                 onChange={(e) => setEndYear(e.target.value)}
-                min="1995" max="2024"
+                min="1995" max="2025"
               />
             </div>
+          </div>
+
+          <div className="form-group">
+            <label>Year Position</label>
+            <select value={textPosition} onChange={(e) => setTextPosition(e.target.value)}>
+              <option value="bottom-center">Bottom Center</option>
+              <option value="top-center">Top Center</option>
+              <option value="top-left">Top Left</option>
+              <option value="top-right">Top Right</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="bottom-right">Bottom Right</option>
+            </select>
           </div>
 
           <button type="submit" disabled={status === 'loading' || status === 'processing'}>
